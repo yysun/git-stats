@@ -35,7 +35,7 @@ Available commands:
 - Generates ASCII chart of code changes by day, month, or year
 - Shows total lines changed (insertions + deletions) per day, month, or year  
 - Shows lifespan of the repository in days
-- Shows average lines changed per day
+- Shows average lines changed precentage and percentile
 - Supports custom repository path input
 
 ## Dependencies

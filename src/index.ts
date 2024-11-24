@@ -115,6 +115,18 @@ class CLI {
     process.stdout.write(`Processing commits: ${bars} ${percentage}% (${current}/${total})`);
   }
 
+  private calculatePercentile(values: number[], percentile: number): number {
+    const sorted = [...values].sort((a, b) => a - b);
+    const index = Math.ceil((percentile / 100) * sorted.length) - 1;
+    return sorted[index];
+  }
+
+  private calculatePercentileRank(value: number, values: number[]): number {
+    const sorted = [...values].sort((a, b) => a - b);
+    const index = sorted.findIndex(v => v >= value);
+    return Math.round((index / sorted.length) * 100);
+  }
+
   async start(): Promise<void> {
     try {
       const repoPath = await this.getRepoPath();
@@ -152,12 +164,18 @@ class CLI {
       const firstDate = dates[0];
       const lastDate = dates[dates.length - 1];
       this.lifespan = getDaysBetweenDates(firstDate, lastDate);
-      const totalChanges = Array.from(stats.values()).reduce((sum, val) => sum + val, 0);
-      const daysWithChanges = stats.size; // Only count days that have changes
-      this.avgChangesPerDay = Math.round(totalChanges / daysWithChanges);
+      
+      // Calculate 90th percentile average
+      const changes = Array.from(stats.values());
+      const percentile90 = this.calculatePercentile(changes, 90);
+      const filteredChanges = changes.filter(v => v <= percentile90);
+      this.avgChangesPerDay = Math.round(
+        filteredChanges.reduce((sum, val) => sum + val, 0) / filteredChanges.length
+      );
+
       console.log('\nAnalysis complete!');
       console.log(`Project lifespan: ${this.lifespan} days`);
-      console.log(`Average changes per active day: ${this.avgChangesPerDay}\n`);
+      console.log(`Average changes per active day (90th percentile): ${this.avgChangesPerDay}\n`);
     } else {
       console.log('\nAnalysis complete!\n');
     }
@@ -212,6 +230,7 @@ class CLI {
     const blue = '\x1b[34m';
     const cyan = '\x1b[36m';
     const gray = '\x1b[90m';
+    const yellow = '\x1b[33m';
 
     console.log(`\nGit Changes Chart for ${repoPath}:\n`);
 
@@ -234,10 +253,12 @@ class CLI {
       const barLength = Math.round((value / maxValue) * scaleWidth);
       const bar = blue + '█'.repeat(barLength) + reset;
       const percentage = (value / totalChanges) * 100;
+      const percentile = this.calculatePercentileRank(value, values);
       const percentageStr = cyan + `${percentage.toFixed(1)}%` + reset;
+      const percentileStr = yellow + `p${percentile}` + reset;
 
       console.log(
-        `${date.padEnd(dateWidth)} │${bar}${' '.repeat(scaleWidth - barLength)} ${value.toString().padStart(maxValueWidth)} ${percentageStr}`
+        `${date.padEnd(dateWidth)} │${bar}${' '.repeat(scaleWidth - barLength)} ${value.toString().padStart(maxValueWidth)} ${percentageStr} ${percentileStr}`
       );
     });
 
