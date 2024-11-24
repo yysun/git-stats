@@ -146,16 +146,18 @@ class CLI {
     await this.currentAnalyzer.analyzeRepository((current, total) => this.updateProgress(current, total));
 
     // Calculate and display lifespan and average changes
-    const dates = Array.from(this.statsManager.getStats().keys()).sort();
+    const stats = this.statsManager.getStats();
+    const dates = Array.from(stats.keys()).sort();
     if (dates.length > 0) {
       const firstDate = dates[0];
       const lastDate = dates[dates.length - 1];
       this.lifespan = getDaysBetweenDates(firstDate, lastDate);
-      const totalChanges = Array.from(this.statsManager.getStats().values()).reduce((sum, val) => sum + val, 0);
-      this.avgChangesPerDay = Math.round(totalChanges / this.lifespan);
+      const totalChanges = Array.from(stats.values()).reduce((sum, val) => sum + val, 0);
+      const daysWithChanges = stats.size; // Only count days that have changes
+      this.avgChangesPerDay = Math.round(totalChanges / daysWithChanges);
       console.log('\nAnalysis complete!');
       console.log(`Project lifespan: ${this.lifespan} days`);
-      console.log(`Average changes per day: ${this.avgChangesPerDay}\n`);
+      console.log(`Average changes per active day: ${this.avgChangesPerDay}\n`);
     } else {
       console.log('\nAnalysis complete!\n');
     }
