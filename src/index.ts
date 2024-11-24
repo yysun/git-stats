@@ -151,7 +151,7 @@ class CLI {
     });
   }
 
-  private async switchRepository(path: string): Promise<void> {
+  private async switchRepository(path: string, percentile: number = 90): Promise<void> {
     console.log(`\nAnalyzing repository at: ${path}`);
     this.statsManager.clear();
     this.currentAnalyzer = new GitAnalyzer(path, this.statsManager);
@@ -165,17 +165,17 @@ class CLI {
       const lastDate = dates[dates.length - 1];
       this.lifespan = getDaysBetweenDates(firstDate, lastDate);
       
-      // Calculate 90th percentile average
+      // Calculate percentile average
       const changes = Array.from(stats.values());
-      const percentile90 = this.calculatePercentile(changes, 90);
-      const filteredChanges = changes.filter(v => v <= percentile90);
+      const percentileValue = this.calculatePercentile(changes, percentile);
+      const filteredChanges = changes.filter(v => v <= percentileValue);
       this.avgChangesPerDay = Math.round(
         filteredChanges.reduce((sum, val) => sum + val, 0) / filteredChanges.length
       );
 
       console.log('\nAnalysis complete!');
       console.log(`Project lifespan: ${this.lifespan} days`);
-      console.log(`Average changes per active day (90th percentile): ${this.avgChangesPerDay}\n`);
+      console.log(`Average changes per active day (${percentile}th percentile): ${this.avgChangesPerDay}\n`);
     } else {
       console.log('\nAnalysis complete!\n');
     }
@@ -203,7 +203,12 @@ class CLI {
           break;
         case 'repo':
           const newPath = await this.getRepoPath(args[0]);
-          await this.switchRepository(newPath);
+          const percentile = args[1] ? parseInt(args[1], 10) : 90;
+          if (isNaN(percentile) || percentile < 1 || percentile > 100) {
+            console.log('Percentile must be a number between 1 and 100');
+            break;
+          }
+          await this.switchRepository(newPath, percentile);
           break;
         case 'help':
           printHelp();
@@ -281,12 +286,12 @@ function getDaysBetweenDates(date1: string, date2: string): number {
 function printHelp() {
   console.log(`
 Available commands:
-  day        - Show changes by day (YYYY-MM-DD)
-  month      - Show changes by month (YYYY-MM)
-  year       - Show changes by year (YYYY)
-  repo [path]- Switch to a different repository
-  help       - Show this help message
-  exit       - Exit the program
+  day              - Show changes by day (YYYY-MM-DD)
+  month            - Show changes by month (YYYY-MM)
+  year             - Show changes by year (YYYY)
+  repo [path] [p]  - Switch to a different repository, optional percentile p (default 90)
+  help             - Show this help message
+  exit             - Exit the program
 `);
 }
 

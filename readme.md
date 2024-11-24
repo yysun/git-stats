@@ -21,12 +21,12 @@ You can run it using:
 
 ```
 Available commands:
-  day        - Show changes by day (YYYY-MM-DD)
-  month      - Show changes by month (YYYY-MM)
-  year       - Show changes by year (YYYY)
-  repo [path]- Switch to a different repository
-  help       - Show this help message
-  exit       - Exit the program
+  day              - Show changes by day (YYYY-MM-DD)
+  month            - Show changes by month (YYYY-MM)
+  year             - Show changes by year (YYYY)
+  repo [path] [p]  - Switch to a different repository, optional percentile p (default 90)
+  help             - Show this help message
+  exit             - Exit the program
 ```
 
 ## Features
