@@ -37,33 +37,51 @@ class StatisticsManager {
 class GitAnalyzer {
   private git: SimpleGit;
   private statsManager: StatisticsManager;
+  private readonly BATCH_SIZE = 50; // Process commits in batches
 
   constructor(repoPath: string, statsManager: StatisticsManager) {
     this.git = simpleGit(resolve(repoPath));
     this.statsManager = statsManager;
   }
 
+  private async processCommit(commit: any): Promise<void> {
+    const date = new Date(commit.date);
+    const dateStr = date.toISOString().split('T')[0];
+    const stats = await this.git.raw(['show', '--numstat', '--format=', commit.hash]);
+    
+    let insertions = 0;
+    let deletions = 0;
+    
+    stats.trim().split('\n').forEach(line => {
+      if (line) {
+        const [ins, del] = line.split('\t').map(n => parseInt(n) || 0);
+        insertions += ins;
+        deletions += del;
+      }
+    });
+
+    this.statsManager.addCommitStats({
+      date: dateStr,
+      changes: insertions + deletions
+    });
+  }
+
+  private async processBatch(commits: any[], startIndex: number, total: number, onProgress: (current: number, total: number) => void): Promise<void> {
+    await Promise.all(
+      commits.map(async (commit, index) => {
+        await this.processCommit(commit);
+        onProgress(startIndex + index + 1, total);
+      })
+    );
+  }
+
   async analyzeRepository(onProgress: (current: number, total: number) => void): Promise<void> {
     const log = await this.git.log();
     const totalCommits = log.all.length;
-
-    for (let i = 0; i < totalCommits; i++) {
-      const commit = log.all[i];
-      onProgress(i + 1, totalCommits);
-
-      const date = new Date(commit.date);
-      const dateStr = date.toISOString().split('T')[0];
-      const changes = await this.git.show([commit.hash, '--stat']);
-      const match = changes.match(/(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/);
-
-      if (match) {
-        const insertions = parseInt(match[2] || '0');
-        const deletions = parseInt(match[3] || '0');
-        this.statsManager.addCommitStats({
-          date: dateStr,
-          changes: insertions + deletions
-        });
-      }
+    
+    for (let i = 0; i < totalCommits; i += this.BATCH_SIZE) {
+      const batch = log.all.slice(i, i + this.BATCH_SIZE);
+      await this.processBatch(batch, i, totalCommits, onProgress);
     }
   }
 }
