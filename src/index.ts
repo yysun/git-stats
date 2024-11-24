@@ -98,6 +98,7 @@ class CLI {
   private currentAnalyzer: GitAnalyzer | null = null;
   private lifespan: number = 0;
   private avgChangesPerDay: number = 0;
+  private currentPercentile: number = 90;  // Add this line
 
   constructor() {
     this.rl = readline.createInterface({
@@ -127,6 +128,27 @@ class CLI {
     return Math.round((index / sorted.length) * 100);
   }
 
+  private calculateStats(values: number[]): { 
+    filteredValues: number[],
+    avgValue: number,
+    percentileValue: number
+  } {
+    if (values.length <= 1) {
+      return {
+        filteredValues: values,
+        avgValue: values[0] || 0,
+        percentileValue: values[0] || 0
+      };
+    }
+
+    const percentileValue = this.calculatePercentile(values, this.currentPercentile);
+    const filteredValues = values.filter(v => v < percentileValue);
+    const avgValue = filteredValues.length > 0 
+      ? filteredValues.reduce((sum, val) => sum + val, 0) / filteredValues.length
+      : 0;
+    return { filteredValues, avgValue, percentileValue };
+  }
+
   async start(): Promise<void> {
     try {
       const repoPath = await this.getRepoPath();
@@ -152,6 +174,7 @@ class CLI {
   }
 
   private async switchRepository(path: string, percentile: number = 90): Promise<void> {
+    this.currentPercentile = percentile;  // Add this line
     console.log(`\nAnalyzing repository at: ${path}`);
     this.statsManager.clear();
     this.currentAnalyzer = new GitAnalyzer(path, this.statsManager);
@@ -164,14 +187,10 @@ class CLI {
       const firstDate = dates[0];
       const lastDate = dates[dates.length - 1];
       this.lifespan = getDaysBetweenDates(firstDate, lastDate);
-      
-      // Calculate percentile average
+
       const changes = Array.from(stats.values());
-      const percentileValue = this.calculatePercentile(changes, percentile);
-      const filteredChanges = changes.filter(v => v <= percentileValue);
-      this.avgChangesPerDay = Math.round(
-        filteredChanges.reduce((sum, val) => sum + val, 0) / filteredChanges.length
-      );
+      const { avgValue } = this.calculateStats(changes);
+      this.avgChangesPerDay = Math.round(avgValue);
 
       console.log('\nAnalysis complete!');
       console.log(`Project lifespan: ${this.lifespan} days`);
@@ -226,44 +245,81 @@ class CLI {
     const dates = Array.from(stats.keys()).sort();
     const values = dates.map(date => stats.get(date) || 0);
     const maxValue = Math.max(...values);
+    const { avgValue } = this.calculateStats(values);
     const totalChanges = values.reduce((sum, val) => sum + val, 0);
     const maxValueWidth = maxValue.toString().length;
     const dateWidth = Math.max(...dates.map(d => d.length));
 
     // ANSI color codes
     const reset = '\x1b[0m';
-    const blue = '\x1b[34m';
-    const cyan = '\x1b[36m';
     const gray = '\x1b[90m';
+    const cyan = '\x1b[36m';
     const yellow = '\x1b[33m';
+    const red = '\x1b[31m';
+    const green = '\x1b[32m';
+    const blue = '\x1b[34m';  // Added for average line
 
     console.log(`\nGit Changes Chart for ${repoPath}:\n`);
 
     // Print scale
     const scaleWidth = 50;
+    const avgPosition = Math.round((avgValue / maxValue) * scaleWidth);
     const scaleValues = Array.from({ length: 5 }, (_, i) => Math.round(maxValue * i / 4));
     const scaleSpacing = Math.floor(scaleWidth / 4);
 
     console.log(' '.repeat(dateWidth) + ' │' + gray + '┈'.repeat(scaleWidth) + reset);
 
+    // Add average value to scale
     const scaleStr = scaleValues
       .map((v, i) => v.toString().padStart(maxValueWidth))
       .map((v, i) => ' '.repeat(i === 0 ? 0 : scaleSpacing - maxValueWidth) + v)
       .join('');
-    console.log(' '.repeat(dateWidth) + ' │' + gray + scaleStr + reset + '\n');
+    console.log(' '.repeat(dateWidth) + ' │' + gray + scaleStr + reset);
+    console.log(' '.repeat(dateWidth) + ' │' + ' '.repeat(avgPosition) + blue + '│' + reset + ` avg: ${Math.round(avgValue)}\n`);
 
     // Print bars
     dates.forEach((date) => {
       const value = stats.get(date) || 0;
       const barLength = Math.round((value / maxValue) * scaleWidth);
-      const bar = blue + '█'.repeat(barLength) + reset;
-      const percentage = (value / totalChanges) * 100;
       const percentile = this.calculatePercentileRank(value, values);
+
+      let barColor;
+      if (percentile >= this.currentPercentile) {
+        barColor = gray;
+      } else if (value >= avgValue) {
+        barColor = green;
+      } else {
+        barColor = red;
+      }
+
+      // Create the bar visualization with average line
+      const barChars = new Array(scaleWidth).fill(' ');
+      // Fill the bar portion
+      for (let i = 0; i < barLength; i++) {
+        barChars[i] = '█';
+      }
+      // Add the average line
+      if (avgPosition >= 0 && avgPosition < scaleWidth) {
+        barChars[avgPosition] = '│';
+      }
+
+      // Apply colors
+      const lineWithAvg = barChars.map((char, pos) => {
+        if (pos === avgPosition) {
+          return blue + char + reset;
+        }
+        if (pos < barLength) {
+          return barColor + char + reset;
+        }
+        return char;
+      }).join('');
+
+      const percentage = (value / totalChanges) * 100;
       const percentageStr = cyan + `${percentage.toFixed(1)}%` + reset;
       const percentileStr = yellow + `p${percentile}` + reset;
 
       console.log(
-        `${date.padEnd(dateWidth)} │${bar}${' '.repeat(scaleWidth - barLength)} ${value.toString().padStart(maxValueWidth)} ${percentageStr} ${percentileStr}`
+        `${date.padEnd(dateWidth)} │${lineWithAvg} ${value.toString().padStart(maxValueWidth)} ${percentageStr} ${percentileStr}`
       );
     });
 
@@ -271,7 +327,7 @@ class CLI {
 
     // Add summary line
     if (this.lifespan > 0) {
-      console.log(`\nLifespan: ${this.lifespan} days, Average changes per day: ${this.avgChangesPerDay}`);
+      console.log(`\nLifespan: ${this.lifespan} days, Average changes per day: ${this.avgChangesPerDay} (${this.currentPercentile}th percentile)`);
     }
   }
 }
@@ -280,7 +336,7 @@ function getDaysBetweenDates(date1: string, date2: string): number {
   const d1 = new Date(date1);
   const d2 = new Date(date2);
   const diffTime = Math.abs(d2.getTime() - d1.getTime());
-  return Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+  return Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
 }
 
 function printHelp() {
