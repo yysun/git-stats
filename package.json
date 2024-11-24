@@ -1,0 +1,35 @@
+{
+  "name": "git-stats",
+  "version": "1.0.0",
+  "description": "CLI tool to visualize git repository statistics",
+  "main": "dist/index.js",
+  "bin": {
+    "git-stats": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "nodemon --watch src --ext ts --exec \"npm run build && npm start\"",
+    "clean": "rimraf dist",
+    "prebuild": "npm run clean",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "git",
+    "statistics",
+    "cli"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "asciichart": "^1.5.25",
+    "simple-git": "^3.19.1"
+  },
+  "devDependencies": {
+    "@types/asciichart": "^1.5.8",
+    "@types/node": "^18.15.11",
+    "nodemon": "^3.1.7",
+    "rimraf": "^5.0.0",
+    "typescript": "^5.0.4"
+  }
+}
