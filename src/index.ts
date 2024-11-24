@@ -18,8 +18,8 @@ class StatisticsManager {
     const aggregated = new Map<string, number>();
     for (const [date, value] of this.stats.entries()) {
       const key = period === 'day' ? date :
-                 period === 'month' ? date.substring(0, 7) :
-                 date.substring(0, 4);
+        period === 'month' ? date.substring(0, 7) :
+          date.substring(0, 4);
       aggregated.set(key, (aggregated.get(key) || 0) + value);
     }
     return aggregated;
@@ -160,18 +160,45 @@ function printChart(stats: Map<string, number>) {
   const dates = Array.from(stats.keys()).sort();
   const values = dates.map(date => stats.get(date) || 0);
   const maxValue = Math.max(...values);
+  const totalChanges = values.reduce((sum, val) => sum + val, 0);
   const maxValueWidth = maxValue.toString().length;
+  const dateWidth = Math.max(...dates.map(d => d.length));
+
+  // ANSI color codes
+  const reset = '\x1b[0m';
+  const blue = '\x1b[34m';
+  const cyan = '\x1b[36m';
+  const gray = '\x1b[90m';
 
   console.log('\nGit Changes Chart:\n');
 
+  // Print scale
+  const scaleWidth = 50;
+  const scaleValues = Array.from({ length: 5 }, (_, i) => Math.round(maxValue * i / 4));
+  const scaleSpacing = Math.floor(scaleWidth / 4);
+
+  console.log(' '.repeat(dateWidth) + ' │' + gray + '┈'.repeat(scaleWidth) + reset);
+
+  const scaleStr = scaleValues
+    .map((v, i) => v.toString().padStart(maxValueWidth))
+    .map((v, i) => ' '.repeat(i === 0 ? 0 : scaleSpacing - maxValueWidth) + v)
+    .join('');
+  console.log(' '.repeat(dateWidth) + ' │' + gray + scaleStr + reset + '\n');
+
+  // Print bars
   dates.forEach((date) => {
     const value = stats.get(date) || 0;
-    const bar = '█'.repeat(Math.floor((value / maxValue) * 50));
-    console.log(`${date} │${bar} ${value}`);
+    const barLength = Math.round((value / maxValue) * scaleWidth);
+    const bar = blue + '█'.repeat(barLength) + reset;
+    const percentage = (value / totalChanges) * 100;
+    const percentageStr = cyan + `${percentage.toFixed(1)}%` + reset;
+
+    console.log(
+      `${date.padEnd(dateWidth)} │${bar}${' '.repeat(scaleWidth - barLength)} ${value.toString().padStart(maxValueWidth)} ${percentageStr}`
+    );
   });
 
-  console.log('─'.repeat(10) + '┴' + '─'.repeat(50 + maxValueWidth));
-  console.log(' '.repeat(11) + '0' + ' '.repeat(47) + maxValue);
+  console.log(' '.repeat(dateWidth) + ' │' + gray + '┈'.repeat(scaleWidth) + reset);
 }
 
 function printHelp() {
