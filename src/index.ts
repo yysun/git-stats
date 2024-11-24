@@ -127,9 +127,9 @@ class CLI {
     }
   }
 
-  private async getRepoPath(): Promise<string> {
-    if (process.argv[2]) {
-      return process.argv[2];
+  private async getRepoPath(cmdPath?: string): Promise<string> {
+    if (cmdPath || process.argv[2]) {
+      return cmdPath || process.argv[2];
     }
 
     return new Promise((resolve) => {
@@ -167,9 +167,11 @@ class CLI {
     printHelp();
 
     while (true) {
-      const command = await new Promise<string>((resolve) => {
+      const input = await new Promise<string>((resolve) => {
         this.rl.question('\nEnter command: ', resolve);
       });
+
+      const [command, ...args] = input.trim().split(/\s+/);
 
       switch (command.toLowerCase()) {
         case 'day':
@@ -182,7 +184,7 @@ class CLI {
           this.printChart(this.statsManager.aggregateStats('year'), this.currentAnalyzer?.getRepoPath() || '');
           break;
         case 'repo':
-          const newPath = await this.getRepoPath();
+          const newPath = await this.getRepoPath(args[0]);
           await this.switchRepository(newPath);
           break;
         case 'help':
@@ -258,12 +260,12 @@ function getDaysBetweenDates(date1: string, date2: string): number {
 function printHelp() {
   console.log(`
 Available commands:
-  day   - Show changes by day (YYYY-MM-DD)
-  month - Show changes by month (YYYY-MM)
-  year  - Show changes by year (YYYY)
-  repo  - Switch to a different repository
-  help  - Show this help message
-  exit  - Exit the program
+  day        - Show changes by day (YYYY-MM-DD)
+  month      - Show changes by month (YYYY-MM)
+  year       - Show changes by year (YYYY)
+  repo [path]- Switch to a different repository
+  help       - Show this help message
+  exit       - Exit the program
 `);
 }
 
