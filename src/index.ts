@@ -3,6 +3,21 @@ import * as readline from 'readline';
 import { resolve, basename } from 'path';
 import * as fs from 'fs';  // Add this import
 
+const colors = {
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  dim: '\x1b[2m',
+  cyan: '\x1b[36m',
+  yellow: '\x1b[33m',
+  green: '\x1b[32m',
+  magenta: '\x1b[35m',
+  blue: '\x1b[34m'
+};
+
+function colorize(text: string, color: keyof typeof colors): string {
+  return `${colors[color]}${text}${colors.reset}`;
+}
+
 interface CommitStats {
   date: string;
   changes: number;
@@ -199,14 +214,13 @@ class CLI {
       const { avgValue } = this.calculateStats(changes);
       this.avgChangesPerDay = Math.round(avgValue);
 
-      console.log('\nAnalysis complete!');
-      console.log(`Project lifespan: ${this.lifespan} days`);
-      console.log(`Average changes per active day (${percentile}th percentile): ${this.avgChangesPerDay}`);
+      console.log('\n' + colorize('✓ Analysis complete!', 'green'));
+      console.log(colorize('├─', 'dim') + ` Project lifespan: ${colorize(this.lifespan.toString(), 'cyan')} days`);
+      console.log(colorize('├─', 'dim') + ` Average changes per active day (${colorize(percentile.toString(), 'yellow')}th percentile): ${colorize(this.avgChangesPerDay.toString(), 'cyan')}`);
       
-      // Add this new section to print ignored extensions
       const ignoredExts = this.currentAnalyzer?.getIgnoredExtensions() || [];
       if (ignoredExts.length > 0) {
-        console.log(`Ignored file extensions: ${ignoredExts.map(ext => '.' + ext).join(', ')}`);
+        console.log(colorize('└─', 'dim') + ` Ignored extensions: ${colorize(ignoredExts.map(ext => '.' + ext).join(', '), 'yellow')}`);
       }
       console.log(''); // Empty line for spacing
     } else {
@@ -398,7 +412,7 @@ class CLI {
     const dateFormat = dates[0]?.length || 0;
     let periodType: string;
     let totalPeriods: number;
-    
+
     if (dateFormat === 4) { // YYYY
       periodType = 'year';
       totalPeriods = this.lifespan / 365;
@@ -414,12 +428,17 @@ class CLI {
     const activePeriods = filteredValues.length;
     const avgPerPeriod = Math.round(filteredValues.reduce((sum, val) => sum + val, 0) / activePeriods);
 
-    console.log(`\nLifespan: ${this.lifespan} days`);
+    console.log('\n' + colorize('Statistics:', 'bright'));
+    console.log(colorize('├─', 'dim') + ` Lifespan: ${colorize(this.lifespan.toString(), 'cyan')} days`);
+    
     if (periodType !== 'day') {
-      console.log(`Average changes per active day (${this.currentPercentile}th percentile): ${this.avgChangesPerDay}`);
+      console.log(colorize('├─', 'dim') + ` Average changes per active day (${colorize(this.currentPercentile.toString(), 'yellow')}th percentile): ${colorize(this.avgChangesPerDay.toString(), 'cyan')}`);
     }
-    console.log(`Average changes per active ${periodType} (${this.currentPercentile}th percentile): ${avgPerPeriod}`);
-    console.log(`Active ${periodType}s: ${activePeriods} out of ${Math.ceil(totalPeriods)} (${((activePeriods / Math.ceil(totalPeriods)) * 100).toFixed(1)}%)`);
+    
+    console.log(colorize('├─', 'dim') + ` Average changes per active ${periodType} (${colorize(this.currentPercentile.toString(), 'yellow')}th percentile): ${colorize(avgPerPeriod.toString(), 'cyan')}`);
+    
+    const activePercentage = ((activePeriods / Math.ceil(totalPeriods)) * 100).toFixed(1);
+    console.log(colorize('└─', 'dim') + ` Active ${periodType}s: ${colorize(activePeriods.toString(), 'cyan')} out of ${Math.ceil(totalPeriods)} (${colorize(activePercentage + '%', 'yellow')})`);
   }
 }
 
