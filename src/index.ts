@@ -148,10 +148,12 @@ class CLI {
     }
 
     const percentileValue = this.calculatePercentile(values, this.currentPercentile);
-    const filteredValues = values.filter(v => v < percentileValue);
-    const avgValue = filteredValues.length > 0
-      ? filteredValues.reduce((sum, val) => sum + val, 0) / filteredValues.length
-      : 0;
+    // Only include values below the percentile threshold
+    const filteredValues = values.filter(v => v <= percentileValue);
+    const totalChanges = filteredValues.reduce((sum, val) => sum + val, 0);
+    // Calculate average based on number of active days (days with changes)
+    const avgValue = totalChanges / filteredValues.length;
+
     return { filteredValues, avgValue, percentileValue };
   }
 
@@ -194,7 +196,7 @@ class CLI {
       const lastDate = dates[dates.length - 1];
       this.lifespan = getDaysBetweenDates(firstDate, lastDate);
 
-      const changes = Array.from(stats.values());
+      const changes = Array.from(stats.values()).filter(v => v > 0); // Only consider days with changes
       const { avgValue } = this.calculateStats(changes);
       this.avgChangesPerDay = Math.round(avgValue);
 
