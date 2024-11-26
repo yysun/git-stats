@@ -68,7 +68,10 @@ Git Changes Chart for apprun-site:
 2024-11 │██████           │                                  490 1.9% p44
         │┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈
 
-Lifespan: 2008 days, Average changes per day: 207 (95th percentile)
+Lifespan: 2008 days
+Average changes per active day (95th percentile): 207
+Average changes per active month (95th percentile): 1430
+Active months: 18 out of 67 (26.9%)
 ```
 
 ## Dependencies

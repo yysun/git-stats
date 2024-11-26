@@ -253,7 +253,7 @@ class CLI {
     const dates = Array.from(stats.keys()).sort();
     const values = dates.map(date => stats.get(date) || 0);
     const maxValue = Math.max(...values);
-    const { avgValue } = this.calculateStats(values);
+    const { avgValue, filteredValues } = this.calculateStats(values);
     const totalChanges = values.reduce((sum, val) => sum + val, 0);
     const maxValueWidth = maxValue.toString().length;
     const dateWidth = Math.max(...dates.map(d => d.length));
@@ -333,10 +333,32 @@ class CLI {
 
     console.log(' '.repeat(dateWidth) + ' │' + gray + '┈'.repeat(scaleWidth) + reset);
 
-    // Add summary line
-    if (this.lifespan > 0) {
-      console.log(`\nLifespan: ${this.lifespan} days, Average changes per day: ${this.avgChangesPerDay} (${this.currentPercentile}th percentile)`);
+    // Add summary line based on the date format
+    const dateFormat = dates[0]?.length || 0;
+    let periodType: string;
+    let totalPeriods: number;
+    
+    if (dateFormat === 4) { // YYYY
+      periodType = 'year';
+      totalPeriods = this.lifespan / 365;
+    } else if (dateFormat === 7) { // YYYY-MM
+      periodType = 'month';
+      totalPeriods = this.lifespan / 30;
+    } else {
+      periodType = 'day';
+      totalPeriods = this.lifespan;
     }
+
+    // Only count periods that have changes and are within the percentile
+    const activePeriods = filteredValues.length;
+    const avgPerPeriod = Math.round(filteredValues.reduce((sum, val) => sum + val, 0) / activePeriods);
+
+    console.log(`\nLifespan: ${this.lifespan} days`);
+    if (periodType !== 'day') {
+      console.log(`Average changes per active day (${this.currentPercentile}th percentile): ${this.avgChangesPerDay}`);
+    }
+    console.log(`Average changes per active ${periodType} (${this.currentPercentile}th percentile): ${avgPerPeriod}`);
+    console.log(`Active ${periodType}s: ${activePeriods} out of ${Math.ceil(totalPeriods)} (${((activePeriods / Math.ceil(totalPeriods)) * 100).toFixed(1)}%)`);
   }
 }
 
