@@ -1,6 +1,6 @@
 import { simpleGit, SimpleGit } from 'simple-git';
 import * as readline from 'readline';
-import { resolve, basename } from 'path';
+import { resolve } from 'path';
 import * as fs from 'fs';  // Add this import
 
 const colors = {
@@ -79,36 +79,27 @@ class GitAnalyzer {
   }
 
   private async processCommit(commit: any): Promise<void> {
-    const date = new Date(commit.date);
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = new Date(commit.date).toISOString().split('T')[0];
     const stats = await this.git.raw(['show', '--numstat', '--format=', commit.hash]);
-
-    let insertions = 0;
-    let deletions = 0;
-
-    stats.trim().split('\n').forEach(line => {
-      if (line) {
-        const [ins, del, file] = line.split('\t');
-        if (file && isFileTypeSupported(file)) {  // Only count supported file types
-          insertions += parseInt(ins) || 0;
-          deletions += parseInt(del) || 0;
-        }
+    
+    const changes = stats.trim().split('\n').reduce((total, line) => {
+      if (!line) return total;
+      const [ins, del, file] = line.split('\t');
+      if (file && isFileTypeSupported(file)) {
+        return total + (parseInt(ins) || 0) + (parseInt(del) || 0);
       }
-    });
+      return total;
+    }, 0);
 
-    this.statsManager.addCommitStats({
-      date: dateStr,
-      changes: insertions + deletions
-    });
+    this.statsManager.addCommitStats({ date: dateStr, changes });
   }
 
   private async processBatch(commits: any[], startIndex: number, total: number, onProgress: (current: number, total: number) => void): Promise<void> {
-    await Promise.all(
-      commits.map(async (commit, index) => {
-        await this.processCommit(commit);
-        onProgress(startIndex + index + 1, total);
-      })
-    );
+    // Process commits sequentially to avoid Git connection issues
+    for (let i = 0; i < commits.length; i++) {
+      await this.processCommit(commits[i]);
+      onProgress(startIndex + i + 1, total);
+    }
   }
 
   async analyzeRepository(onProgress: (current: number, total: number) => void): Promise<void> {
@@ -124,6 +115,17 @@ class GitAnalyzer {
   getRepoPath(): string {
     return this.repoPath; // Return the full path instead of just basename
   }
+}
+
+interface ChartData {
+  dates: string[];
+  values: number[];
+  maxValue: number;
+  dateWidth: number;
+  avgValue: number;
+  filteredValues: number[];
+  totalChanges: number;
+  maxValueWidth: number;
 }
 
 class CLI {
@@ -271,67 +273,107 @@ class CLI {
     printHelp();
 
     while (true) {
-      const [command, ...args] = (await new Promise<string>((resolve) => {
-        this.rl.question('\nEnter command: ', resolve);
-      })).trim().split(/\s+/);
+      const command = await this.safeExecute(async () => {
+        const input = await new Promise<string>((resolve) => {
+          this.rl.question('\nEnter command: ', resolve);
+        });
+        return input.trim().split(/\s+/);
+      });
 
-      switch (command.toLowerCase()) {
-        case 'day':
-          this.printChart(this.statsManager.getStats(), this.currentAnalyzer?.getRepoPath() || '');
-          break;
-        case 'month':
-          this.printChart(this.statsManager.aggregateStats('month'), this.currentAnalyzer?.getRepoPath() || '');
-          break;
-        case 'year':
-          this.printChart(this.statsManager.aggregateStats('year'), this.currentAnalyzer?.getRepoPath() || '');
-          break;
-        case 'repo':
-          const newPath = await this.getRepoPath(args[0]);
-          const percentile = args[1] ? parseInt(args[1], 10) : 95;
-          if (isNaN(percentile) || percentile < 1 || percentile > 100) {
-            console.log('Percentile must be a number between 1 and 100');
-            break;
-          }
-          this.currentAnalyzer = new GitAnalyzer(newPath, this.statsManager);
-          await this.analyzeCurrentRepository(percentile);
-          break;
-        case 'percentile':
-          const p = parseInt(args[0], 10);
-          if (isNaN(p) || p < 1 || p > 100) {
-            console.log('Percentile must be a number between 1 and 100');
-            break;
-          }
-          await this.analyzeCurrentRepository(p);
-          break;
-        case 'ignore':
-          if (!this.currentAnalyzer) {
-            console.log('No repository currently loaded');
-            break;
-          }
-          const extensions = args[0]?.split(',').filter(Boolean) || [];
-          this.currentAnalyzer.setIgnoredExtensions(extensions);
-          await this.analyzeCurrentRepository(this.currentPercentile);
-          break;
-        case 'help':
-          printHelp();
-          break;
-        case 'exit':
-          this.rl.close();
-          return;
-        default:
-          console.log('Unknown command. Type "help" for available commands.');
-      }
+      if (!command) continue;
+
+      // Use command pattern for better organization
+      const [cmd, ...args] = command;
+      await this.executeCommand(cmd.toLowerCase(), args);
     }
   }
 
-  private printChart(stats: Map<string, number>, repoPath: string): void {
+  private async executeCommand(cmd: string, args: string[]): Promise<void> {
+    const commands: Record<string, () => Promise<void>> = {
+      day: async () => this.printChart(this.statsManager.getStats(), this.currentAnalyzer?.getRepoPath() || ''),
+      month: async () => this.printChart(this.statsManager.aggregateStats('month'), this.currentAnalyzer?.getRepoPath() || ''),
+      year: async () => this.printChart(this.statsManager.aggregateStats('year'), this.currentAnalyzer?.getRepoPath() || ''),
+      repo: async () => {
+        const newPath = await this.getRepoPath(args[0]);
+        const percentile = args[1] ? parseInt(args[1], 10) : 95;
+        if (isNaN(percentile) || percentile < 1 || percentile > 100) {
+          console.log('Percentile must be a number between 1 and 100');
+          return;
+        }
+        this.currentAnalyzer = new GitAnalyzer(newPath, this.statsManager);
+        await this.analyzeCurrentRepository(percentile);
+      },
+      percentile: async () => {
+        const p = parseInt(args[0], 10);
+        if (isNaN(p) || p < 1 || p > 100) {
+          console.log('Percentile must be a number between 1 and 100');
+          return;
+        }
+        await this.analyzeCurrentRepository(p);
+      },
+      ignore: async () => {
+        if (!this.currentAnalyzer) {
+          console.log('No repository currently loaded');
+          return;
+        }
+        const extensions = args[0]?.split(',').filter(Boolean) || [];
+        this.currentAnalyzer.setIgnoredExtensions(extensions);
+        await this.analyzeCurrentRepository(this.currentPercentile);
+      },
+      help: async () => {
+        printHelp();
+      },
+      exit: async () => {
+        this.rl.close();
+        process.exit(0);
+      }
+    };
+
+    if (cmd in commands) {
+      await this.safeExecute(() => commands[cmd]());
+    } else {
+      console.log('Unknown command. Type "help" for available commands.');
+    }
+  }
+
+  private prepareChartData(stats: Map<string, number>): ChartData {
     const dates = Array.from(stats.keys()).sort();
     const values = dates.map(date => stats.get(date) || 0);
     const maxValue = Math.max(...values);
     const { avgValue, filteredValues } = this.calculateStats(values);
     const totalChanges = values.reduce((sum, val) => sum + val, 0);
-    const maxValueWidth = maxValue.toString().length;
-    const dateWidth = Math.max(...dates.map(d => d.length));
+    
+    return {
+      dates,
+      values,
+      maxValue,
+      dateWidth: Math.max(...dates.map(d => d.length)),
+      avgValue,
+      filteredValues,
+      totalChanges,
+      maxValueWidth: maxValue.toString().length
+    };
+  }
+
+  private printChart(stats: Map<string, number>, repoPath: string): void {
+    // Cache expensive calculations
+    const memoizedPercentileRank = new Map<number, number>();
+    const calculatePercentileRankCached = (value: number, values: number[]): number => {
+      if (memoizedPercentileRank.has(value)) {
+        return memoizedPercentileRank.get(value)!;
+      }
+      const rank = this.calculatePercentileRank(value, values);
+      memoizedPercentileRank.set(value, rank);
+      return rank;
+    };
+
+    // Pre-calculate common values
+    const { 
+      dates, values, maxValue, dateWidth, avgValue, 
+      filteredValues, totalChanges, maxValueWidth 
+    } = this.prepareChartData(stats);
+    
+    if (!dates.length) return;
 
     // ANSI color codes
     const reset = '\x1b[0m';
@@ -364,7 +406,7 @@ class CLI {
     dates.forEach((date) => {
       const value = stats.get(date) || 0;
       const barLength = Math.round((value / maxValue) * scaleWidth);
-      const percentile = this.calculatePercentileRank(value, values);
+      const percentile = calculatePercentileRankCached(value, values);
 
       let barColor;
       if (percentile >= this.currentPercentile) {
@@ -439,6 +481,16 @@ class CLI {
     
     const activePercentage = ((activePeriods / Math.ceil(totalPeriods)) * 100).toFixed(1);
     console.log(colorize('└─', 'dim') + ` Active ${periodType}s: ${colorize(activePeriods.toString(), 'cyan')} out of ${Math.ceil(totalPeriods)} (${colorize(activePercentage + '%', 'yellow')})`);
+  }
+
+  // Add error boundary
+  private async safeExecute<T>(operation: () => Promise<T>): Promise<T | void> {
+    try {
+      return await operation();
+    } catch (error) {
+      console.error('Operation failed:', error instanceof Error ? error.message : 'Unknown error');
+      return;
+    }
   }
 }
 
