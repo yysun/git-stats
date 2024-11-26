@@ -19,12 +19,14 @@ Then, you can run it using:
 
 ```
 Available commands:
-  day              - Show changes by day (YYYY-MM-DD)
-  month            - Show changes by month (YYYY-MM)
-  year             - Show changes by year (YYYY)
-  repo [path] [p]  - Switch to a different repository, optional percentile p (default 90)
-  help             - Show this help message
-  exit             - Exit the program
+  day                 - Show changes by day (YYYY-MM-DD)
+  month               - Show changes by month (YYYY-MM)
+  year                - Show changes by year (YYYY)
+  repo [path] [p]     - Switch to a different repository, optional percentile p (default 95)
+  percentile <p>      - Update current percentile threshold (1-100)
+  ignore <exts>       - Ignore files with extensions (comma-separated, e.g., "json,md,txt")
+  help                - Show this help message
+  exit                - Exit the program
 ```
 
 ## Features

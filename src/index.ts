@@ -1,14 +1,19 @@
 import { simpleGit, SimpleGit } from 'simple-git';
 import * as readline from 'readline';
 import { resolve, basename } from 'path';
+import * as fs from 'fs';  // Add this import
 
 interface CommitStats {
   date: string;
   changes: number;
 }
 
+let ignoredExtensions: string[] = [];
+
 function isFileTypeSupported(filePath: string): boolean {
-  return !filePath.toLowerCase().endsWith('package-lock.json');
+  if (filePath.toLowerCase().endsWith('package-lock.json')) return false;
+  const ext = filePath.split('.').pop()?.toLowerCase();
+  return ext ? !ignoredExtensions.includes(ext) : true;
 }
 
 class StatisticsManager {
@@ -45,9 +50,17 @@ class GitAnalyzer {
   private repoPath: string;  // Add this line
 
   constructor(repoPath: string, statsManager: StatisticsManager) {
-    this.repoPath = repoPath;  // Add this line
-    this.git = simpleGit(resolve(repoPath));
+    this.repoPath = resolve(repoPath); // Resolve the full path
+    this.git = simpleGit(this.repoPath);
     this.statsManager = statsManager;
+  }
+
+  setIgnoredExtensions(exts: string[]): void {
+    ignoredExtensions = exts.map(ext => ext.toLowerCase().replace(/^\./, ''));
+  }
+
+  getIgnoredExtensions(): string[] {
+    return [...ignoredExtensions];
   }
 
   private async processCommit(commit: any): Promise<void> {
@@ -94,7 +107,7 @@ class GitAnalyzer {
   }
 
   getRepoPath(): string {
-    return basename(this.repoPath);
+    return this.repoPath; // Return the full path instead of just basename
   }
 }
 
@@ -157,10 +170,55 @@ class CLI {
     return { filteredValues, avgValue, percentileValue };
   }
 
+  private async analyzeCurrentRepository(percentile: number = this.currentPercentile): Promise<void> {
+    if (!this.currentAnalyzer) {
+      console.log('No repository currently loaded');
+      return;
+    }
+
+    const path = this.currentAnalyzer.getRepoPath();
+    if (!this.isValidGitRepository(path)) {
+      console.log(`Error: '${path}' is not a valid Git repository`);
+      return;
+    }
+
+    this.currentPercentile = percentile;
+    console.log(`\nAnalyzing repository at: ${path}`);
+    this.statsManager.clear();
+    await this.currentAnalyzer.analyzeRepository((current, total) => this.updateProgress(current, total));
+
+    // Calculate and display stats
+    const stats = this.statsManager.getStats();
+    const dates = Array.from(stats.keys()).sort();
+    if (dates.length > 0) {
+      const firstDate = dates[0];
+      const lastDate = dates[dates.length - 1];
+      this.lifespan = getDaysBetweenDates(firstDate, lastDate);
+
+      const changes = Array.from(stats.values()).filter(v => v > 0);
+      const { avgValue } = this.calculateStats(changes);
+      this.avgChangesPerDay = Math.round(avgValue);
+
+      console.log('\nAnalysis complete!');
+      console.log(`Project lifespan: ${this.lifespan} days`);
+      console.log(`Average changes per active day (${percentile}th percentile): ${this.avgChangesPerDay}`);
+      
+      // Add this new section to print ignored extensions
+      const ignoredExts = this.currentAnalyzer?.getIgnoredExtensions() || [];
+      if (ignoredExts.length > 0) {
+        console.log(`Ignored file extensions: ${ignoredExts.map(ext => '.' + ext).join(', ')}`);
+      }
+      console.log(''); // Empty line for spacing
+    } else {
+      console.log('\nAnalysis complete!\n');
+    }
+  }
+
   async start(): Promise<void> {
     try {
       const repoPath = await this.getRepoPath();
-      await this.switchRepository(repoPath);
+      this.currentAnalyzer = new GitAnalyzer(repoPath, this.statsManager);
+      await this.analyzeCurrentRepository();
       await this.commandLoop();
     } catch (error) {
       console.error('Error:', error);
@@ -170,41 +228,28 @@ class CLI {
   }
 
   private async getRepoPath(cmdPath?: string): Promise<string> {
-    if (cmdPath || process.argv[2]) {
-      return cmdPath || process.argv[2];
-    }
-
-    return new Promise((resolve) => {
+    const inputPath = cmdPath || process.argv[2] || await new Promise<string>((resolve) => {
       this.rl.question('Enter repository path (or press Enter for current directory): ', (input) => {
         resolve(input || process.cwd());
       });
     });
+
+    const fullPath = resolve(inputPath);
+    if (!this.isValidGitRepository(fullPath)) {
+      throw new Error(`'${fullPath}' is not a valid Git repository`);
+    }
+    return fullPath;
   }
 
-  private async switchRepository(path: string, percentile: number = 95): Promise<void> {  // Changed from 90 to 95
-    this.currentPercentile = percentile;  // Add this line
-    console.log(`\nAnalyzing repository at: ${path}`);
-    this.statsManager.clear();
-    this.currentAnalyzer = new GitAnalyzer(path, this.statsManager);
-    await this.currentAnalyzer.analyzeRepository((current, total) => this.updateProgress(current, total));
-
-    // Calculate and display lifespan and average changes
-    const stats = this.statsManager.getStats();
-    const dates = Array.from(stats.keys()).sort();
-    if (dates.length > 0) {
-      const firstDate = dates[0];
-      const lastDate = dates[dates.length - 1];
-      this.lifespan = getDaysBetweenDates(firstDate, lastDate);
-
-      const changes = Array.from(stats.values()).filter(v => v > 0); // Only consider days with changes
-      const { avgValue } = this.calculateStats(changes);
-      this.avgChangesPerDay = Math.round(avgValue);
-
-      console.log('\nAnalysis complete!');
-      console.log(`Project lifespan: ${this.lifespan} days`);
-      console.log(`Average changes per active day (${percentile}th percentile): ${this.avgChangesPerDay}\n`);
-    } else {
-      console.log('\nAnalysis complete!\n');
+  private isValidGitRepository(path: string): boolean {
+    try {
+      const fullPath = resolve(path);
+      const gitPath = `${fullPath}/.git`;
+      return fs.existsSync(fullPath) && (
+        fs.existsSync(gitPath) && fs.statSync(gitPath).isDirectory()
+      );
+    } catch (error) {
+      return false;
     }
   }
 
@@ -212,11 +257,9 @@ class CLI {
     printHelp();
 
     while (true) {
-      const input = await new Promise<string>((resolve) => {
+      const [command, ...args] = (await new Promise<string>((resolve) => {
         this.rl.question('\nEnter command: ', resolve);
-      });
-
-      const [command, ...args] = input.trim().split(/\s+/);
+      })).trim().split(/\s+/);
 
       switch (command.toLowerCase()) {
         case 'day':
@@ -235,7 +278,25 @@ class CLI {
             console.log('Percentile must be a number between 1 and 100');
             break;
           }
-          await this.switchRepository(newPath, percentile);
+          this.currentAnalyzer = new GitAnalyzer(newPath, this.statsManager);
+          await this.analyzeCurrentRepository(percentile);
+          break;
+        case 'percentile':
+          const p = parseInt(args[0], 10);
+          if (isNaN(p) || p < 1 || p > 100) {
+            console.log('Percentile must be a number between 1 and 100');
+            break;
+          }
+          await this.analyzeCurrentRepository(p);
+          break;
+        case 'ignore':
+          if (!this.currentAnalyzer) {
+            console.log('No repository currently loaded');
+            break;
+          }
+          const extensions = args[0]?.split(',').filter(Boolean) || [];
+          this.currentAnalyzer.setIgnoredExtensions(extensions);
+          await this.analyzeCurrentRepository(this.currentPercentile);
           break;
         case 'help':
           printHelp();
@@ -372,12 +433,14 @@ function getDaysBetweenDates(date1: string, date2: string): number {
 function printHelp() {
   console.log(`
 Available commands:
-  day              - Show changes by day (YYYY-MM-DD)
-  month            - Show changes by month (YYYY-MM)
-  year             - Show changes by year (YYYY)
-  repo [path] [p]  - Switch to a different repository, optional percentile p (default 95)
-  help             - Show this help message
-  exit             - Exit the program
+  day                 - Show changes by day (YYYY-MM-DD)
+  month               - Show changes by month (YYYY-MM)
+  year                - Show changes by year (YYYY)
+  repo [path] [p]     - Switch to a different repository, optional percentile p (default 95)
+  percentile <p>      - Update current percentile threshold (1-100)
+  ignore <exts>       - Ignore files with extensions (comma-separated, e.g., "json,md,txt")
+  help                - Show this help message
+  exit                - Exit the program
 `);
 }
 
