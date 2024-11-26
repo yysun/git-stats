@@ -104,7 +104,7 @@ class CLI {
   private currentAnalyzer: GitAnalyzer | null = null;
   private lifespan: number = 0;
   private avgChangesPerDay: number = 0;
-  private currentPercentile: number = 90;
+  private currentPercentile: number = 95;  // Changed from 90 to 95
 
   constructor() {
     this.rl = readline.createInterface({
@@ -179,7 +179,7 @@ class CLI {
     });
   }
 
-  private async switchRepository(path: string, percentile: number = 90): Promise<void> {
+  private async switchRepository(path: string, percentile: number = 95): Promise<void> {  // Changed from 90 to 95
     this.currentPercentile = percentile;  // Add this line
     console.log(`\nAnalyzing repository at: ${path}`);
     this.statsManager.clear();
@@ -228,7 +228,7 @@ class CLI {
           break;
         case 'repo':
           const newPath = await this.getRepoPath(args[0]);
-          const percentile = args[1] ? parseInt(args[1], 10) : 90;
+          const percentile = args[1] ? parseInt(args[1], 10) : 95;
           if (isNaN(percentile) || percentile < 1 || percentile > 100) {
             console.log('Percentile must be a number between 1 and 100');
             break;
@@ -351,7 +351,7 @@ Available commands:
   day              - Show changes by day (YYYY-MM-DD)
   month            - Show changes by month (YYYY-MM)
   year             - Show changes by year (YYYY)
-  repo [path] [p]  - Switch to a different repository, optional percentile p (default 90)
+  repo [path] [p]  - Switch to a different repository, optional percentile p (default 95)
   help             - Show this help message
   exit             - Exit the program
 `);
