@@ -7,6 +7,10 @@ interface CommitStats {
   changes: number;
 }
 
+function isFileTypeSupported(filePath: string): boolean {
+  return !filePath.toLowerCase().endsWith('package-lock.json');
+}
+
 class StatisticsManager {
   private stats: Map<string, number> = new Map();
 
@@ -37,7 +41,7 @@ class StatisticsManager {
 class GitAnalyzer {
   private git: SimpleGit;
   private statsManager: StatisticsManager;
-  private readonly BATCH_SIZE = 50; // Process commits in batches
+  private readonly BATCH_SIZE = 100; // Process commits in batches
   private repoPath: string;  // Add this line
 
   constructor(repoPath: string, statsManager: StatisticsManager) {
@@ -56,9 +60,11 @@ class GitAnalyzer {
 
     stats.trim().split('\n').forEach(line => {
       if (line) {
-        const [ins, del] = line.split('\t').map(n => parseInt(n) || 0);
-        insertions += ins;
-        deletions += del;
+        const [ins, del, file] = line.split('\t');
+        if (file && isFileTypeSupported(file)) {  // Only count supported file types
+          insertions += parseInt(ins) || 0;
+          deletions += parseInt(del) || 0;
+        }
       }
     });
 
@@ -98,7 +104,7 @@ class CLI {
   private currentAnalyzer: GitAnalyzer | null = null;
   private lifespan: number = 0;
   private avgChangesPerDay: number = 0;
-  private currentPercentile: number = 90;  // Add this line
+  private currentPercentile: number = 90;
 
   constructor() {
     this.rl = readline.createInterface({
@@ -128,7 +134,7 @@ class CLI {
     return Math.round((index / sorted.length) * 100);
   }
 
-  private calculateStats(values: number[]): { 
+  private calculateStats(values: number[]): {
     filteredValues: number[],
     avgValue: number,
     percentileValue: number
@@ -143,7 +149,7 @@ class CLI {
 
     const percentileValue = this.calculatePercentile(values, this.currentPercentile);
     const filteredValues = values.filter(v => v < percentileValue);
-    const avgValue = filteredValues.length > 0 
+    const avgValue = filteredValues.length > 0
       ? filteredValues.reduce((sum, val) => sum + val, 0) / filteredValues.length
       : 0;
     return { filteredValues, avgValue, percentileValue };
