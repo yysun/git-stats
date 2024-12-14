@@ -22,6 +22,7 @@ Available commands:
   day                 - Show changes by day (YYYY-MM-DD)
   month               - Show changes by month (YYYY-MM)
   year                - Show changes by year (YYYY)
+  commit [from]       - Show changes by commit with hash and message. Optional 'from' parameter can be a commit hash, branch name, or tag to show commits only from that ref
   repo [path] [p]     - Switch to a different repository, optional percentile p (default 95)
   percentile <p>      - Update current percentile threshold (1-100)
   ignore <exts>       - Ignore files with extensions (comma-separated, e.g., "json,md,txt")
@@ -32,10 +33,10 @@ Available commands:
 ## Features
 
 - Analyzes git repository history
-- Generates ASCII chart of code changes by day, month, or year
-- Shows total lines changed (insertions + deletions) per day, month, or year  
+- Generates ASCII chart of code changes by day, month, year, or commit
+- Shows total lines changed (insertions + deletions) per day, month, year, or commit
 - Shows lifespan of the repository in days
-- Shows average lines changed precentage and percentile
+- Shows average lines changed percentage and percentile
 - Supports custom repository path input
 
 
