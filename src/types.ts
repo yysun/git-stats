@@ -1,7 +1,8 @@
 export interface CommitStats {
   date: string;
   timestamp: Date;
-  changes: number;
+  insertions: number;
+  deletions: number;
   hash?: string;
   message?: string;
 }
@@ -15,6 +16,8 @@ export interface ChartData {
   filteredValues: number[];
   totalChanges: number;
   maxValueWidth: number;
+  insertions: number[];
+  deletions: number[];
 }
 
 export const colors = {
@@ -25,7 +28,8 @@ export const colors = {
   yellow: '\x1b[33m',
   green: '\x1b[32m',
   magenta: '\x1b[35m',
-  blue: '\x1b[34m'
+  blue: '\x1b[34m',
+  red: '\x1b[31m'
 } as const;
 
 export type ColorName = keyof typeof colors;

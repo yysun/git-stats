@@ -4,49 +4,56 @@ import * as fs from 'fs';
 import { CommitStats } from './types';
 
 export class StatisticsManager {
-  private stats: Map<string, number> = new Map();
+  private stats: Map<string, { insertions: number; deletions: number }> = new Map();
   private commitStats: Map<string, CommitStats> = new Map();
   private commitOrder: string[] = []; // Store commit hashes in order
 
-  addCommitStats({ date, timestamp, changes, hash, message }: CommitStats): void {
-    this.stats.set(date, (this.stats.get(date) || 0) + changes);
+  addCommitStats({ date, timestamp, insertions, deletions, hash, message }: CommitStats): void {
+    const existing = this.stats.get(date) || { insertions: 0, deletions: 0 };
+    this.stats.set(date, {
+      insertions: existing.insertions + insertions,
+      deletions: existing.deletions + deletions
+    });
     if (hash) {
-      this.commitStats.set(hash, { date, timestamp, changes, hash, message });
-      this.commitOrder.push(hash); // Keep track of commit order
+      this.commitStats.set(hash, { date, timestamp, insertions, deletions, hash, message });
+      this.commitOrder.push(hash);
     }
   }
 
-  aggregateStats(period: 'day' | 'month' | 'year' | 'commit'): Map<string, number> {
+  aggregateStats(period: 'day' | 'month' | 'year' | 'commit'): Map<string, { insertions: number; deletions: number }> {
     if (period === 'commit') {
-      // Use the original order from git log
       const orderedCommits = this.commitOrder.map(hash => {
         const stats = this.commitStats.get(hash)!;
         return [
           `${stats.date} ${stats.hash?.substring(0, 7)} ${stats.message?.split('\n')[0].substring(0, 50)}`,
-          stats.changes
-        ] as [string, number];
+          { insertions: stats.insertions, deletions: stats.deletions }
+        ] as [string, { insertions: number; deletions: number }];
       });
       return new Map(orderedCommits);
     }
 
-    const aggregated = new Map<string, number>();
+    const aggregated = new Map<string, { insertions: number; deletions: number }>();
     for (const [date, value] of this.stats.entries()) {
       const key = period === 'day' ? date :
         period === 'month' ? date.substring(0, 7) :
           date.substring(0, 4);
-      aggregated.set(key, (aggregated.get(key) || 0) + value);
+      const existing = aggregated.get(key) || { insertions: 0, deletions: 0 };
+      aggregated.set(key, {
+        insertions: existing.insertions + value.insertions,
+        deletions: existing.deletions + value.deletions
+      });
     }
     return aggregated;
   }
 
-  getStats(): Map<string, number> {
+  getStats(): Map<string, { insertions: number; deletions: number }> {
     return this.stats;
   }
 
   clear(): void {
     this.stats.clear();
     this.commitStats.clear();
-    this.commitOrder = []; // Clear commit order
+    this.commitOrder = [];
   }
 }
 
@@ -82,19 +89,23 @@ export class GitAnalyzer {
     const dateStr = timestamp.toISOString().split('T')[0];
     const stats = await this.git.raw(['show', '--numstat', '--format=', commit.hash]);
     
-    const changes = stats.trim().split('\n').reduce((total, line) => {
-      if (!line) return total;
+    let totalInsertions = 0;
+    let totalDeletions = 0;
+
+    stats.trim().split('\n').forEach(line => {
+      if (!line) return;
       const [ins, del, file] = line.split('\t');
       if (file && this.isFileTypeSupported(file)) {
-        return total + (parseInt(ins) || 0) + (parseInt(del) || 0);
+        totalInsertions += parseInt(ins) || 0;
+        totalDeletions += parseInt(del) || 0;
       }
-      return total;
-    }, 0);
+    });
 
     this.statsManager.addCommitStats({ 
       date: dateStr, 
       timestamp,
-      changes,
+      insertions: totalInsertions,
+      deletions: totalDeletions,
       hash: commit.hash,
       message: commit.message
     });

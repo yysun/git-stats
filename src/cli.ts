@@ -80,10 +80,8 @@ export class CLI {
     }
 
     const percentileValue = this.calculatePercentile(values, this.currentPercentile);
-    // Only include values below the percentile threshold
     const filteredValues = values.filter(v => v <= percentileValue);
     const totalChanges = filteredValues.reduce((sum, val) => sum + val, 0);
-    // Calculate average based on number of active days (days with changes)
     const avgValue = totalChanges / filteredValues.length;
 
     return { filteredValues, avgValue, percentileValue };
@@ -114,7 +112,7 @@ export class CLI {
       const lastDate = dates[dates.length - 1];
       this.lifespan = getDaysBetweenDates(firstDate, lastDate);
 
-      const changes = Array.from(stats.values()).filter(v => v > 0);
+      const changes = Array.from(stats.values()).map(v => v.insertions + v.deletions).filter(v => v > 0);
       const { avgValue } = this.calculateStats(changes);
       this.avgChangesPerDay = Math.round(avgValue);
 
@@ -153,7 +151,6 @@ export class CLI {
     });
 
     const fullPath = resolve(inputPath);
-    // Create a temporary analyzer just for validation
     const tempAnalyzer = new GitAnalyzer(fullPath, new StatisticsManager());
     if (!tempAnalyzer.isValidGitRepository(fullPath)) {
       throw new Error(`'${fullPath}' is not a valid Git repository`);
@@ -174,7 +171,6 @@ export class CLI {
 
       if (!command) continue;
 
-      // Use command pattern for better organization
       const [cmd, ...args] = command;
       await this.executeCommand(cmd.toLowerCase(), args);
     }
@@ -233,15 +229,19 @@ export class CLI {
     }
   }
 
-  private prepareChartData(stats: Map<string, number>): ChartData {
-    // For non-commit formats (day, month, year), we need to sort
+  private prepareChartData(stats: Map<string, { insertions: number; deletions: number }>): ChartData {
     const dates = Array.from(stats.keys());
     if (!dates[0]?.includes(' ')) {
       dates.sort();
     }
-    // For commit format, preserve the order from git log
 
-    const values = dates.map(date => stats.get(date) || 0);
+    const values = dates.map(date => {
+      const stat = stats.get(date)!;
+      return stat.insertions + stat.deletions;
+    });
+
+    const insertions = dates.map(date => stats.get(date)!.insertions);
+    const deletions = dates.map(date => stats.get(date)!.deletions);
     const maxValue = Math.max(...values);
     const { avgValue, filteredValues } = this.calculateStats(values);
     const totalChanges = values.reduce((sum, val) => sum + val, 0);
@@ -254,12 +254,13 @@ export class CLI {
       avgValue,
       filteredValues,
       totalChanges,
-      maxValueWidth: maxValue.toString().length
+      maxValueWidth: maxValue.toString().length,
+      insertions,
+      deletions
     };
   }
 
-  private printChart(stats: Map<string, number>, repoPath: string): void {
-    // Cache expensive calculations
+  private printChart(stats: Map<string, { insertions: number; deletions: number }>, repoPath: string): void {
     const memoizedPercentileRank = new Map<number, number>();
     const calculatePercentileRankCached = (value: number, values: number[]): number => {
       if (memoizedPercentileRank.has(value)) {
@@ -270,26 +271,24 @@ export class CLI {
       return rank;
     };
 
-    // Pre-calculate common values
     const { 
       dates, values, maxValue, dateWidth, avgValue, 
-      filteredValues, totalChanges, maxValueWidth 
+      filteredValues, totalChanges, maxValueWidth,
+      insertions, deletions
     } = this.prepareChartData(stats);
     
     if (!dates.length) return;
 
-    // ANSI color codes
-    const reset = '\x1b[0m';
-    const gray = '\x1b[90m';
-    const cyan = '\x1b[36m';
-    const yellow = '\x1b[33m';
-    const red = '\x1b[31m';
-    const green = '\x1b[32m';
-    const blue = '\x1b[34m';  // Added for average line
+    const reset = colors.reset;
+    const gray = colors.dim;
+    const cyan = colors.cyan;
+    const yellow = colors.yellow;
+    const red = colors.red;
+    const green = colors.green;
+    const blue = colors.blue;
 
     console.log(`\nGit Changes Chart for ${repoPath}:\n`);
 
-    // Print scale
     const scaleWidth = 50;
     const avgPosition = Math.round((avgValue / maxValue) * scaleWidth);
     const scaleValues = Array.from({ length: 5 }, (_, i) => Math.round(maxValue * i / 4));
@@ -297,7 +296,6 @@ export class CLI {
 
     console.log(' '.repeat(dateWidth) + ' │' + gray + '┈'.repeat(scaleWidth) + reset);
 
-    // Add average value to scale
     const scaleStr = scaleValues
       .map((v, i) => v.toString().padStart(maxValueWidth))
       .map((v, i) => ' '.repeat(i === 0 ? 0 : scaleSpacing - maxValueWidth) + v)
@@ -305,43 +303,33 @@ export class CLI {
     console.log(' '.repeat(dateWidth) + ' │' + gray + scaleStr + reset);
     console.log(' '.repeat(dateWidth) + ' │' + ' '.repeat(avgPosition) + blue + '│' + reset + ` avg: ${Math.round(avgValue)}\n`);
 
-    // Print bars
-    dates.forEach((date) => {
-      const value = stats.get(date) || 0;
-      const barLength = Math.round((value / maxValue) * scaleWidth);
+    dates.forEach((date, index) => {
+      const value = values[index];
+      const ins = insertions[index];
+      const del = deletions[index];
+      const totalBarLength = Math.round((value / maxValue) * scaleWidth);
+      const insBarLength = Math.round((ins / maxValue) * scaleWidth);
+      const delBarLength = Math.round((del / maxValue) * scaleWidth);
       const percentile = calculatePercentileRankCached(value, values);
 
-      let barColor;
-      if (percentile >= this.currentPercentile) {
-        barColor = gray;
-      } else if (value >= avgValue) {
-        barColor = green;
-      } else {
-        barColor = red;
-      }
-
-      // Create the bar visualization with average line
       const barChars = new Array(scaleWidth).fill(' ');
-      // Fill the bar portion
-      for (let i = 0; i < barLength; i++) {
-        barChars[i] = '█';
+      
+      // Fill insertions (green) first
+      for (let i = 0; i < insBarLength; i++) {
+        barChars[i] = green + '█' + reset;
       }
-      // Add the average line
+      
+      // Fill deletions (red) on top
+      for (let i = 0; i < delBarLength; i++) {
+        barChars[i] = red + '█' + reset;
+      }
+
+      // Add average line
       if (avgPosition >= 0 && avgPosition < scaleWidth) {
-        barChars[avgPosition] = '│';
+        barChars[avgPosition] = blue + '│' + reset;
       }
 
-      // Apply colors
-      const lineWithAvg = barChars.map((char, pos) => {
-        if (pos === avgPosition) {
-          return blue + char + reset;
-        }
-        if (pos < barLength) {
-          return barColor + char + reset;
-        }
-        return char;
-      }).join('');
-
+      const lineWithAvg = barChars.join('');
       const percentage = (value / totalChanges) * 100;
       const percentageStr = cyan + `${percentage.toFixed(1)}%` + reset;
       const percentileStr = yellow + `p${percentile}` + reset;
@@ -353,18 +341,17 @@ export class CLI {
 
     console.log(' '.repeat(dateWidth) + ' │' + gray + '┈'.repeat(scaleWidth) + reset);
 
-    // Add summary line based on the date format
     const dateFormat = dates[0]?.length || 0;
     let periodType: string;
     let totalPeriods: number;
 
-    if (dateFormat === 4) { // YYYY
+    if (dateFormat === 4) {
       periodType = 'year';
       totalPeriods = this.lifespan / 365;
-    } else if (dateFormat === 7) { // YYYY-MM
+    } else if (dateFormat === 7) {
       periodType = 'month';
       totalPeriods = this.lifespan / 30;
-    } else if (dates[0]?.includes(' ')) { // Commit format
+    } else if (dates[0]?.includes(' ')) {
       periodType = 'commit';
       totalPeriods = dates.length;
     } else {
@@ -372,7 +359,6 @@ export class CLI {
       totalPeriods = this.lifespan;
     }
 
-    // Only count periods that have changes and are within the percentile
     const activePeriods = filteredValues.length;
     const avgPerPeriod = Math.round(filteredValues.reduce((sum, val) => sum + val, 0) / activePeriods);
 
@@ -389,7 +375,6 @@ export class CLI {
     console.log(colorize('└─', 'dim') + ` Active ${periodType}s: ${colorize(activePeriods.toString(), 'cyan')} out of ${Math.ceil(totalPeriods)} (${colorize(activePercentage + '%', 'yellow')})`);
   }
 
-  // Add error boundary
   private async safeExecute<T>(operation: () => Promise<T>): Promise<T | void> {
     try {
       return await operation();
