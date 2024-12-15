@@ -44,6 +44,7 @@ export class CLI {
   private lifespan: number = 0;
   private avgChangesPerDay: number = 0;
   private currentPercentile: number = 95;
+  private lastChartType: 'day' | 'month' | 'year' | 'commit' = 'day';
 
   constructor() {
     this.rl = readline.createInterface({
@@ -185,10 +186,20 @@ export class CLI {
 
   private async executeCommand(cmd: string, args: string[]): Promise<void> {
     const commands: Record<string, () => Promise<void>> = {
-      day: async () => this.printChart(this.statsManager.getStats(), this.currentAnalyzer?.getRepoPath() || ''),
-      month: async () => this.printChart(this.statsManager.aggregateStats('month'), this.currentAnalyzer?.getRepoPath() || ''),
-      year: async () => this.printChart(this.statsManager.aggregateStats('year'), this.currentAnalyzer?.getRepoPath() || ''),
+      day: async () => {
+        this.lastChartType = 'day';
+        this.printChart(this.statsManager.getStats(), this.currentAnalyzer?.getRepoPath() || '');
+      },
+      month: async () => {
+        this.lastChartType = 'month';
+        this.printChart(this.statsManager.aggregateStats('month'), this.currentAnalyzer?.getRepoPath() || '');
+      },
+      year: async () => {
+        this.lastChartType = 'year';
+        this.printChart(this.statsManager.aggregateStats('year'), this.currentAnalyzer?.getRepoPath() || '');
+      },
       commit: async () => {
+        this.lastChartType = 'commit';
         const fromRef = args[0];
         await this.analyzeCurrentRepository(this.currentPercentile, fromRef);
         this.printChart(this.statsManager.aggregateStats('commit'), this.currentAnalyzer?.getRepoPath() || '');
@@ -210,6 +221,22 @@ export class CLI {
           return;
         }
         await this.analyzeCurrentRepository(p);
+        
+        // Reprint the last viewed chart type
+        switch (this.lastChartType) {
+          case 'day':
+            this.printChart(this.statsManager.getStats(), this.currentAnalyzer?.getRepoPath() || '');
+            break;
+          case 'month':
+            this.printChart(this.statsManager.aggregateStats('month'), this.currentAnalyzer?.getRepoPath() || '');
+            break;
+          case 'year':
+            this.printChart(this.statsManager.aggregateStats('year'), this.currentAnalyzer?.getRepoPath() || '');
+            break;
+          case 'commit':
+            this.printChart(this.statsManager.aggregateStats('commit'), this.currentAnalyzer?.getRepoPath() || '');
+            break;
+        }
       },
       ignore: async () => {
         if (!this.currentAnalyzer) {
