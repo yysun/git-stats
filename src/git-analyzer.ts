@@ -1,3 +1,9 @@
+/**
+ * Git repository analysis engine
+ * - StatisticsManager: Aggregates commit stats by day/month/year/commit
+ * - GitAnalyzer: Processes git repositories with batch processing and file filtering
+ */
+
 import { simpleGit, SimpleGit } from 'simple-git';
 import { resolve } from 'path';
 import * as fs from 'fs';

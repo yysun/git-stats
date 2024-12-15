@@ -1,3 +1,10 @@
+/**
+ * Interactive CLI for git repository analysis
+ * - Provides commands for visualizing git stats (day/month/year/commit)
+ * - Generates ASCII charts with colored output
+ * - Supports percentile filtering and file extension exclusion
+ */
+
 import * as readline from 'readline';
 import { resolve } from 'path';
 import { ChartData, colors, ColorName } from './types';

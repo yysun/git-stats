@@ -1,3 +1,10 @@
+/**
+ * Core types for git repository statistics
+ * - CommitStats: Single git commit statistics
+ * - ChartData: Processed data for visualization
+ * - Terminal colors for output formatting
+ */
+
 export interface CommitStats {
   date: string;
   timestamp: Date;
