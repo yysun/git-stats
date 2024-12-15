@@ -34,7 +34,10 @@ Available commands:
 
 - Analyzes git repository history
 - Generates ASCII chart of code changes by day, month, year, or commit
-- Shows total lines changed (insertions + deletions) per day, month, year, or commit
+- Shows line changes with color-coded bars:
+  - Red bars for deletions
+  - Green bars for insertions
+  - Grey bars for changes above percentile threshold
 - Shows lifespan of the repository in days
 - Shows average lines changed percentage and percentile
 - Supports custom repository path input
@@ -51,24 +54,24 @@ Git Changes Chart for apprun-site:
         │   0        1046        2093        3139        4185
         │                 │ avg: 1430
 
-2019-05 │█████████████████│██████████████████               3027 11.8% p72
-2019-06 │█████████████████│████████████████████████████     3838 14.9% p83
-2019-07 │                 │                                    4 0.0% p0
-2019-08 │                 │                                    4 0.0% p0
-2019-09 │█                │                                   71 0.3% p22
-2019-11 │█                │                                   68 0.3% p17
-2020-03 │███              │                                  246 1.0% p39
-2021-05 │█████████████████│██████████████████████           3379 13.1% p78
-2021-06 │████████████████ │                                 1380 5.4% p56
-2022-03 │█████████████████│████████████████████████████████ 4185 16.3% p94
-2022-04 │███████████████  │                                 1263 4.9% p50
-2022-12 │█████████████████│██                               1694 6.6% p61
-2023-08 │                 │                                   25 0.1% p11
-2023-10 │█                │                                   87 0.3% p28
-2024-08 │█████████████████│██                               1704 6.6% p67
-2024-09 │█████████████████│████████████████████████████████ 4176 16.2% p89
-2024-10 │█                │                                  100 0.4% p33
-2024-11 │██████           │                                  490 1.9% p44
+2019-05 │████████████████████████████████                   3027 11.8% p72
+2019-06 │██████████████████████████████████████████        3838 14.9% p83
+2019-07 │                                                     4 0.0% p0
+2019-08 │                                                     4 0.0% p0
+2019-09 │█                                                   71 0.3% p22
+2019-11 │█                                                   68 0.3% p17
+2020-03 │███                                                246 1.0% p39
+2021-05 │████████████████████████████████                  3379 13.1% p78
+2021-06 │██████████████                                    1380 5.4% p56
+2022-03 │████████████████████████████████████████████      4185 16.3% p94
+2022-04 │█████████████                                     1263 4.9% p50
+2022-12 │█████████████████                                 1694 6.6% p61
+2023-08 │                                                    25 0.1% p11
+2023-10 │█                                                   87 0.3% p28
+2024-08 │█████████████████                                 1704 6.6% p67
+2024-09 │████████████████████████████████████████████      4176 16.2% p89
+2024-10 │█                                                  100 0.4% p33
+2024-11 │██████                                             490 1.9% p44
         │┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈
 
 Lifespan: 2008 days
@@ -76,6 +79,13 @@ Average changes per active day (95th percentile): 207
 Average changes per active month (95th percentile): 1430
 Active months: 18 out of 67 (26.9%)
 ```
+
+The chart shows:
+- Red bars (█) represent line deletions
+- Green bars (█) represent line insertions
+- Grey bars (█) represent changes above the percentile threshold
+- Blue vertical line (│) shows the average
+- Each row shows: date │ visualization total_changes percentage percentile
 
 ## Dependencies
 

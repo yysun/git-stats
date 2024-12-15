@@ -25,6 +25,7 @@ export interface ChartData {
   maxValueWidth: number;
   insertions: number[];
   deletions: number[];
+  percentileValue: number;
 }
 
 export const colors = {

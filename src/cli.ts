@@ -1,7 +1,7 @@
 /**
  * Interactive CLI for git repository analysis
  * - Provides commands for visualizing git stats (day/month/year/commit)
- * - Generates ASCII charts with colored output
+ * - Generates ASCII charts with colored output (red for deletions, green for insertions, grey for outliers)
  * - Supports percentile filtering and file extension exclusion
  */
 
@@ -126,7 +126,7 @@ export class CLI {
       console.log('\n' + colorize('✓ Analysis complete!', 'green'));
       console.log(colorize('├─', 'dim') + ` Project lifespan: ${colorize(this.lifespan.toString(), 'cyan')} days`);
       console.log(colorize('├─', 'dim') + ` Average changes per active day (${colorize(percentile.toString(), 'yellow')}th percentile): ${colorize(this.avgChangesPerDay.toString(), 'cyan')}`);
-      
+
       const ignoredExts = this.currentAnalyzer?.getIgnoredExtensions() || [];
       if (ignoredExts.length > 0) {
         console.log(colorize('└─', 'dim') + ` Ignored extensions: ${colorize(ignoredExts.map(ext => '.' + ext).join(', '), 'yellow')}`);
@@ -250,9 +250,9 @@ export class CLI {
     const insertions = dates.map(date => stats.get(date)!.insertions);
     const deletions = dates.map(date => stats.get(date)!.deletions);
     const maxValue = Math.max(...values);
-    const { avgValue, filteredValues } = this.calculateStats(values);
+    const { avgValue, filteredValues, percentileValue } = this.calculateStats(values);
     const totalChanges = values.reduce((sum, val) => sum + val, 0);
-    
+
     return {
       dates,
       values,
@@ -263,7 +263,8 @@ export class CLI {
       totalChanges,
       maxValueWidth: maxValue.toString().length,
       insertions,
-      deletions
+      deletions,
+      percentileValue
     };
   }
 
@@ -278,12 +279,12 @@ export class CLI {
       return rank;
     };
 
-    const { 
-      dates, values, maxValue, dateWidth, avgValue, 
+    const {
+      dates, values, maxValue, dateWidth, avgValue,
       filteredValues, totalChanges, maxValueWidth,
-      insertions, deletions
+      insertions, deletions, percentileValue
     } = this.prepareChartData(stats);
-    
+
     if (!dates.length) return;
 
     const reset = colors.reset;
@@ -320,15 +321,22 @@ export class CLI {
       const percentile = calculatePercentileRankCached(value, values);
 
       const barChars = new Array(scaleWidth).fill(' ');
-      
-      // Fill insertions (green) first
-      for (let i = 0; i < insBarLength; i++) {
-        barChars[i] = green + '█' + reset;
-      }
-      
-      // Fill deletions (red) on top
-      for (let i = 0; i < delBarLength; i++) {
-        barChars[i] = red + '█' + reset;
+
+      if (value > percentileValue) {
+        // For values above percentile threshold, show entire bar in grey
+        for (let i = 0; i < totalBarLength && i < scaleWidth; i++) {
+          barChars[i] = gray + '█' + reset;
+        }
+      } else {
+        // Fill deletions (red) first
+        for (let i = 0; i < delBarLength; i++) {
+          barChars[i] = red + '█' + reset;
+        }
+
+        // Fill insertions (green) after
+        for (let i = delBarLength; i < delBarLength + insBarLength && i < scaleWidth; i++) {
+          barChars[i] = green + '█' + reset;
+        }
       }
 
       // Add average line
@@ -371,13 +379,13 @@ export class CLI {
 
     console.log('\n' + colorize('Statistics:', 'bright'));
     console.log(colorize('├─', 'dim') + ` Lifespan: ${colorize(this.lifespan.toString(), 'cyan')} days`);
-    
+
     if (periodType !== 'day') {
       console.log(colorize('├─', 'dim') + ` Average changes per active day (${colorize(this.currentPercentile.toString(), 'yellow')}th percentile): ${colorize(this.avgChangesPerDay.toString(), 'cyan')}`);
     }
-    
+
     console.log(colorize('├─', 'dim') + ` Average changes per active ${periodType} (${colorize(this.currentPercentile.toString(), 'yellow')}th percentile): ${colorize(avgPerPeriod.toString(), 'cyan')}`);
-    
+
     const activePercentage = ((activePeriods / Math.ceil(totalPeriods)) * 100).toFixed(1);
     console.log(colorize('└─', 'dim') + ` Active ${periodType}s: ${colorize(activePeriods.toString(), 'cyan')} out of ${Math.ceil(totalPeriods)} (${colorize(activePercentage + '%', 'yellow')})`);
   }
